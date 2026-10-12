@@ -224,16 +224,6 @@
             <span id="student-form-error-text">Mohon lengkapi nama lengkap dan pilih kelas terlebih dahulu.</span>
           </div>
 
-          <!-- Autosave Restore Notice (jika terdeteksi sesi pengerjaan sebelumnya) -->
-          <div id="restore-session-notice" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
-              <span class="text-base">⏳</span>
-              <span>Ditemukan progres pengerjaan sebelumnya. Klik mulai untuk melanjutkan.</span>
-            </div>
-            <button id="btn-discard-session" class="text-[11px] underline text-amber-900 font-semibold hover:text-amber-950 shrink-0">
-              Mulai Ulang Baru
-            </button>
-          </div>
         </div>
 
         <!-- Start Button -->
@@ -250,6 +240,17 @@
 
     <!-- 2. QUIZ INTERFACE PAGE -->
     <section id="view-quiz" class="hidden space-y-4 sm:space-y-6">
+
+      <!-- Notification Banner saat Sesi Otomatis Dipulihkan -->
+      <div id="resume-quiz-banner" class="hidden p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold flex items-center justify-between gap-2 shadow-xs transition-all">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>Sesi pengerjaan kamu dipulihkan otomatis ke nomor dan sisa waktu terakhir.</span>
+        </div>
+        <span class="text-[11px] font-bold text-blue-600 bg-blue-100/70 px-2 py-0.5 rounded-md">Autosave Aktif</span>
+      </div>
       
       <!-- Top Question Navigation Bar (1 - 10 Bebas Pilih) -->
       <div class="bg-white rounded-2xl p-3.5 sm:p-5 shadow-xs border border-slate-200">
@@ -843,10 +844,9 @@
     const inputStudentClass = document.getElementById("input-student-class");
     const studentFormError = document.getElementById("student-form-error");
     const studentFormErrorText = document.getElementById("student-form-error-text");
-    const restoreSessionNotice = document.getElementById("restore-session-notice");
-    const btnDiscardSession = document.getElementById("btn-discard-session");
     const btnStartQuiz = document.getElementById("btn-start-quiz");
     const btnStartLabel = document.getElementById("btn-start-label");
+    const resumeQuizBanner = document.getElementById("resume-quiz-banner");
 
     const questionNavGrid = document.getElementById("question-nav-grid");
     const passageBadge = document.getElementById("passage-badge");
@@ -889,7 +889,6 @@
         modalTimeout.classList.add("hidden");
         modalTimeout.classList.remove("flex");
       });
-      btnDiscardSession.addEventListener("click", handleDiscardSession);
 
       inputStudentName.addEventListener("input", clearFormError);
       inputStudentClass.addEventListener("change", clearFormError);
@@ -950,31 +949,48 @@
         return;
       }
 
-      // Jika ada progres pengerjaan yang belum selesai (Autosave resume)
+      // Fitur d: Langsung masuk ke pengerjaan terakhir siswa tanpa opsi ulang
       if (saved.quizStarted && !saved.isCompleted) {
         studentData = saved.studentData || { name: "", className: "" };
         userAnswers = saved.userAnswers || {};
         currentQuestionIndex = saved.currentQuestionIndex || 0;
         remainingSeconds = saved.remainingSeconds !== undefined ? saved.remainingSeconds : TOTAL_QUIZ_SECONDS;
+        quizStarted = true;
 
-        if (studentData.name) inputStudentName.value = studentData.name;
-        if (studentData.className) inputStudentClass.value = studentData.className;
+        // Jika waktu sudah habis saat halaman dibuka kembali
+        if (remainingSeconds <= 0) {
+          remainingSeconds = 0;
+          finalizeAndShowResults("timeout");
+          return;
+        }
 
-        restoreSessionNotice.classList.remove("hidden");
-        btnStartLabel.textContent = "Lanjutkan Pengerjaan (Autosave)";
+        // Tampilkan identitas siswa pada bar navigasi atas
+        headerStudentName.textContent = studentData.name;
+        headerStudentClass.textContent = studentData.className;
+        headerStudentBadge.classList.remove("hidden");
+
+        // Langsung alihkan tampilan ke antarmuka soal (lewati welcoming page)
+        viewWelcome.classList.add("hidden");
+        viewResult.classList.add("hidden");
+        viewQuiz.classList.remove("hidden");
+        headerProgress.classList.remove("hidden");
+        headerProgress.classList.add("flex");
+
+        // Tampilkan notifikasi bahwa sesi dipulihkan otomatis
+        if (resumeQuizBanner) {
+          resumeQuizBanner.classList.remove("hidden");
+          setTimeout(() => {
+            resumeQuizBanner.classList.add("hidden");
+          }, 4500);
+        }
+
+        // Jalankan timer dari sisa waktu terakhir dan tampilkan soal terakhir
+        startTimer();
+        renderNavigationGrid();
+        renderCurrentQuestion();
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    }
-
-    async function handleDiscardSession(e) {
-      e.stopPropagation();
-      await clearStateFromDB();
-      userAnswers = {};
-      studentData = { name: "", className: "" };
-      remainingSeconds = TOTAL_QUIZ_SECONDS;
-      inputStudentName.value = "";
-      inputStudentClass.value = "";
-      restoreSessionNotice.classList.add("hidden");
-      btnStartLabel.textContent = "Mulai Kerjakan Latihan";
     }
 
     function clearFormError() {
